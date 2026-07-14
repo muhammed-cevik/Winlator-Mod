@@ -1,4 +1,4 @@
-name: Build & Release Signed APK
+Name: Build Unsigned Release APK
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    name: Build Signed Release APK
+    name: Build Unsigned Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -39,11 +39,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v3
 
-      - name: Decode Keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $GITHUB_WORKSPACE/keystore.jks
-          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/keystore.jks" >> $GITHUB_ENV
-
       - name: Set version name
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -54,12 +49,7 @@ jobs:
           echo "VERSION_NAME=$VERSION" >> $GITHUB_ENV
           sed -i "s/versionName .*/versionName \"$VERSION\"/" app/build.gradle
 
-      - name: Build Release APK
-        env:
-          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Build Unsigned Release APK
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
@@ -67,35 +57,13 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
-          cp app/build/outputs/apk/release/app-release.apk \
-             output/WinLtr-${{ env.VERSION_NAME }}.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk \
+             output/WinLtr-${{ env.VERSION_NAME }}-unsigned.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WinLtr-${{ env.VERSION_NAME }}
-          path: output/WinLtr-${{ env.VERSION_NAME }}.apk
+          name: WinLtr-${{ env.VERSION_NAME }}-unsigned
+          path: output/WinLtr-${{ env.VERSION_NAME }}-unsigned.apk
           retention-days: 30
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: WinLtr ${{ env.VERSION_NAME }}
-          body: |
-            ## WinLtr ${{ env.VERSION_NAME }}
-            
-            ### Changes
-            - Custom build by TDev
-            - Added RTX 30/40 series GPU cards
-            - Added AMD RX 6000/7000 series GPU cards
-            - Dark blue theme
-            - Package: com.tdev.winltr
-            
-            ### Install
-            Download the APK below and install on your Android device (Android 8.0+, arm64).
-          files: output/WinLtr-${{ env.VERSION_NAME }}.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
