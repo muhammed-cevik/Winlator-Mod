@@ -1,0 +1,101 @@
+name: Build & Release Signed APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g. 9.0.1-tdev)'
+        required: false
+        default: '9.0.0-tdev'
+
+jobs:
+  build:
+    name: Build Signed Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK 22.1.7171670
+        run: |
+          echo "y" | sdkmanager "ndk;22.1.7171670"
+          echo "y" | sdkmanager "cmake;3.22.1"
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $GITHUB_WORKSPACE/keystore.jks
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/keystore.jks" >> $GITHUB_ENV
+
+      - name: Set version name
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version_name }}"
+          fi
+          echo "VERSION_NAME=$VERSION" >> $GITHUB_ENV
+          sed -i "s/versionName .*/versionName \"$VERSION\"/" app/build.gradle
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          cp app/build/outputs/apk/release/app-release.apk \
+             output/WinLtr-${{ env.VERSION_NAME }}.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinLtr-${{ env.VERSION_NAME }}
+          path: output/WinLtr-${{ env.VERSION_NAME }}.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WinLtr ${{ env.VERSION_NAME }}
+          body: |
+            ## WinLtr ${{ env.VERSION_NAME }}
+            
+            ### Changes
+            - Custom build by TDev
+            - Added RTX 30/40 series GPU cards
+            - Added AMD RX 6000/7000 series GPU cards
+            - Dark blue theme
+            - Package: com.tdev.winltr
+            
+            ### Install
+            Download the APK below and install on your Android device (Android 8.0+, arm64).
+          files: output/WinLtr-${{ env.VERSION_NAME }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
