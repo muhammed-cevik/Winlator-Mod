@@ -28,10 +28,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '7.5'
+
       - name: Install NDK and CMake
         run: |
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "ndk;22.1.7171670" "cmake;3.22.1"
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;22.1.7171670" "cmake;3.22.1"
 
       - name: Set version name
         run: |
@@ -44,9 +48,7 @@ jobs:
           sed -i "s/versionName .*/versionName \"$VERSION\"/" app/build.gradle
 
       - name: Build Release APK
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+        run: gradle assembleRelease --no-daemon
 
       - name: Rename APK
         run: |
@@ -80,4 +82,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
